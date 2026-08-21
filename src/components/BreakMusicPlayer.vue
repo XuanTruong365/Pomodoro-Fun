@@ -1,167 +1,283 @@
 <template>
-    <div class="music-player flex flex-col items-center gap-2 p-4 bg-white dark:bg-gray-800/80 rounded-xl shadow-md w-full max-w-md">
-
-        <!-- Select Video / Custom URL -->
-        <div class="flex gap-2 w-full items-center">
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Break Music:</label>
-            <select v-model="selectedVideoId" @change="onVideoSelect" class="flex-1 rounded-md p-1">
-                <option v-for="v in videoOptions" :key="v.id" :value="v.id">{{ v.name }}</option>
-                <option value="">Custom...</option>
-            </select>
-        </div>
-        <input
-            v-if="selectedVideoId === ''"
-            type="text"
-            v-model="customVideoUrl"
-            @change="setCustomVideo"
-            placeholder="Paste YouTube URL"
-            class="w-full rounded-md p-1 mt-1"
-        />
-
-        <!-- Play/Pause + Volume -->
-        <div class="flex items-center gap-3 mt-2 w-full">
-            <button @click="togglePlay" class="px-3 py-1 bg-indigo-500 text-white rounded-md hover:bg-indigo-600">
-                {{ playing ? '⏸ Pause' : '▶ Play' }}
-            </button>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="volume" @input="changeVolume" class="flex-1"/>
-        </div>
-
-        <!-- Player -->
-        <div class="w-full mt-2 relative overflow-hidden rounded-lg shadow">
-            <!-- giữ tỷ lệ 16:9 -->
-            <div class="relative pb-[56.25%] h-0">
-                <div ref="playerContainer" class="absolute top-0 left-0 w-full h-full"></div>
-            </div>
-        </div>
-
-        <!-- Video Title -->
-        <div class="text-sm text-gray-700 dark:text-gray-300 mt-1">{{ videoTitle }}</div>
+  <section class="music-player" aria-label="Nhạc nghỉ giải lao">
+    <div class="music-copy">
+      <p>Nhạc nghỉ</p>
+      <h2>Não cần soundtrack để hồi máu</h2>
     </div>
+
+    <div class="music-controls">
+      <select v-model="selectedVideoId" @change="loadSelectedVideo">
+        <option v-for="video in videoOptions" :key="video.id" :value="video.id">
+          {{ video.name }}
+        </option>
+        <option value="custom">Dán YouTube khác...</option>
+      </select>
+
+      <input
+        v-if="selectedVideoId === 'custom'"
+        v-model="customVideoUrl"
+        placeholder="https://www.youtube.com/watch?v=..."
+        @change="setCustomVideo"
+      />
+
+      <div class="transport-row">
+        <button type="button" @click="togglePlay">
+          {{ playing ? 'Tạm dừng' : 'Phát thử' }}
+        </button>
+        <label>
+          Âm lượng
+          <input v-model.number="volume" max="1" min="0" step="0.01" type="range" @input="changeVolume" />
+        </label>
+      </div>
+    </div>
+
+    <div class="player-frame">
+      <div ref="playerContainer"></div>
+    </div>
+
+    <p class="video-title">{{ videoTitle || 'Chọn bài nghỉ, đừng chọn bài suy đời quá.' }}</p>
+  </section>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
-    isBreak: Boolean
+  isBreak: Boolean
 })
 
+const STORAGE_KEY = 'truongdev-break-video'
 const playerContainer = ref(null)
-let player = null
 const playing = ref(false)
-const volume = ref(0.5)
+const volume = ref(0.45)
 const videoTitle = ref('')
-
-// ---- LocalStorage support ----
-const savedVideoId = localStorage.getItem('breakVideoId') || '3JZ_D3ELwOQ'
-const selectedVideoId = ref(savedVideoId)
 const customVideoUrl = ref('')
+const selectedVideoId = ref(localStorage.getItem(STORAGE_KEY) || '35AdtzquJYg')
+
+let player = null
 
 const videoOptions = [
-    { id: 'juLHy0gp_xY', name: 'VietNam Today' },
-    { id: '35AdtzquJYg', name: 'Relaxing Rain Sounds' },
-    { id: 'XtJnyl-3tNo', name: 'Việt Nam Tớ Đấy' }
+  { id: '35AdtzquJYg', name: 'Mưa nhẹ cho não dịu' },
+  { id: 'juLHy0gp_xY', name: 'VietNam Today' },
+  { id: 'XtJnyl-3tNo', name: 'Việt Nam tớ đấy' }
 ]
 
-// ---- Load YouTube API ----
-function loadYouTubeAPI() {
-    return new Promise(resolve => {
-        if (window.YT && window.YT.Player) return resolve()
-        const tag = document.createElement('script')
-        tag.src = "https://www.youtube.com/iframe_api"
-        document.body.appendChild(tag)
-        window.onYouTubeIframeAPIReady = () => resolve()
-    })
-}
+onMounted(initPlayer)
+onBeforeUnmount(() => {
+  if (player?.destroy) player.destroy()
+})
 
-// ---- Initialize or Update Player ----
-async function initPlayer() {
-    await loadYouTubeAPI()
-    if (!playerContainer.value) return
-    if (!player) {
-        player = new YT.Player(playerContainer.value, {
-            videoId: selectedVideoId.value,
-            playerVars: { autoplay: 0, controls: 0, modestbranding: 1, rel: 0 },
-            events: { onReady: onPlayerReady, onStateChange: onStateChange }
-        })
-    } else {
-        // chỉ load video mới, không recreate
-        player.loadVideoById(selectedVideoId.value)
-    }
-}
-
-function onPlayerReady(e) {
-    e.target.setVolume(volume.value * 100)
-    fetchTitle()
-    if (props.isBreak) e.target.playVideo()
-}
-
-function onStateChange(e) {
-    playing.value = e.data === YT.PlayerState.PLAYING
-    fetchTitle()
-}
-
-function fetchTitle() {
-    if (player && player.getVideoData) videoTitle.value = player.getVideoData().title
-}
-
-// ---- Play/Pause & Volume ----
-function togglePlay() {
+watch(
+  () => props.isBreak,
+  (isBreak) => {
     if (!player) return
-    if (playing.value) player.pauseVideo()
-    else player.playVideo()
-}
+    isBreak ? player.playVideo() : player.pauseVideo()
+  }
+)
 
-function changeVolume() {
-    if (player) player.setVolume(volume.value * 100)
-}
-
-// ---- Handle Video Selection ----
-function onVideoSelect() {
-    if (selectedVideoId.value !== '') {
-        saveSelectedVideo(selectedVideoId.value)
-        if (player) player.loadVideoById(selectedVideoId.value)
+function loadYouTubeAPI() {
+  return new Promise((resolve) => {
+    if (window.YT?.Player) {
+      resolve()
+      return
     }
+
+    const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]')
+    if (!existingScript) {
+      const tag = document.createElement('script')
+      tag.src = 'https://www.youtube.com/iframe_api'
+      document.body.appendChild(tag)
+    }
+
+    const previousReady = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = () => {
+      previousReady?.()
+      resolve()
+    }
+  })
+}
+
+async function initPlayer() {
+  await loadYouTubeAPI()
+  if (!playerContainer.value) return
+
+  player = new window.YT.Player(playerContainer.value, {
+    videoId: currentVideoId(),
+    playerVars: { autoplay: 0, controls: 1, modestbranding: 1, rel: 0 },
+    events: {
+      onReady: handleReady,
+      onStateChange: handleStateChange
+    }
+  })
+}
+
+function handleReady(event) {
+  event.target.setVolume(volume.value * 100)
+  updateTitle()
+  if (props.isBreak) event.target.playVideo()
+}
+
+function handleStateChange(event) {
+  playing.value = event.data === window.YT.PlayerState.PLAYING
+  updateTitle()
+}
+
+function currentVideoId() {
+  return selectedVideoId.value === 'custom' ? parseYouTubeId(customVideoUrl.value) || videoOptions[0].id : selectedVideoId.value
+}
+
+function loadSelectedVideo() {
+  const id = currentVideoId()
+  localStorage.setItem(STORAGE_KEY, selectedVideoId.value)
+  if (player && id) player.loadVideoById(id)
 }
 
 function setCustomVideo() {
-    const id = parseYouTubeId(customVideoUrl.value)
-    if (!id) return alert('Invalid URL')
-    selectedVideoId.value = id
-    saveSelectedVideo(id)
-    if (player) player.loadVideoById(id)
+  const id = parseYouTubeId(customVideoUrl.value)
+  if (!id) {
+    videoTitle.value = 'URL này hơi lạc đường. Thử link YouTube khác nhé.'
+    return
+  }
+
+  localStorage.setItem(STORAGE_KEY, 'custom')
+  if (player) player.loadVideoById(id)
 }
 
-function saveSelectedVideo(id) {
-    localStorage.setItem('breakVideoId', id)
+function togglePlay() {
+  if (!player) return
+  playing.value ? player.pauseVideo() : player.playVideo()
 }
 
-// ---- Watch break status ----
-watch(() => props.isBreak, val => {
-    if (!player) return
-    if (val) player.playVideo()
-    else player.pauseVideo()
-})
+function changeVolume() {
+  if (player) player.setVolume(volume.value * 100)
+}
 
-// ---- Parse YouTube ID from URL ----
+function updateTitle() {
+  if (player?.getVideoData) videoTitle.value = player.getVideoData().title
+}
+
 function parseYouTubeId(url) {
-    if (!url) return null
-    const regex = /(?:v=|\/)([0-9A-Za-z_-]{11}).*/
-    const match = url.match(regex)
-    return match ? match[1] : null
+  const match = String(url).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([0-9A-Za-z_-]{11})/)
+  return match?.[1] || null
 }
-
-// ---- Mounted ----
-onMounted(() => {
-    initPlayer()
-})
 </script>
 
 <style scoped>
-.music-player input[type="range"] { width: 100%; }
-.music-player iframe {
-    width: 100% !important;
-    height: 100% !important;
-    border-radius: 0.75rem; /* bo góc đồng bộ UI */
+.music-player {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(18px);
+}
+
+:global(.theme-dark) .music-player {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.music-copy p {
+  margin: 0 0 6px;
+  color: rgba(23, 32, 51, 0.66);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+:global(.theme-dark) .music-copy p,
+:global(.theme-dark) .video-title {
+  color: rgba(238, 242, 255, 0.68);
+}
+
+.music-copy h2 {
+  margin: 0;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.music-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.music-controls select,
+.music-controls input:not([type='range']) {
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:global(.theme-dark) .music-controls select,
+:global(.theme-dark) .music-controls input:not([type='range']) {
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.transport-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.transport-row button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: #fff;
+  background: #14b8a6;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.transport-row label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-weight: 800;
+}
+
+.transport-row input {
+  accent-color: #14b8a6;
+}
+
+.player-frame {
+  position: relative;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #0f172a;
+  aspect-ratio: 16 / 9;
+}
+
+.player-frame > div,
+.player-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.video-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: rgba(23, 32, 51, 0.66);
+  font-weight: 750;
+}
+
+@media (max-width: 820px) {
+  .music-player {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

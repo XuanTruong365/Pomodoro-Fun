@@ -2,7 +2,7 @@
   <div :class="['app-shell', themeClass]">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true">P</div>
+        <div class="brand-mark" aria-hidden="true">🍌</div>
         <div>
           <h1>A di da lat</h1>
           <p>{{ headerPunchline }}</p>
@@ -305,7 +305,7 @@ const coachLine = computed(() => {
   if (!running.value) return 'Timer không phán xét. Nó chỉ ngồi đó, rất tròn, chờ bạn.'
   if (secondsLeft.value <= 60 && phase.value === 'focus') return 'Một phút cuối. Deadline đang mất bình tĩnh.'
   if (phase.value === 'focus') return 'Làm một việc thôi. Đa nhiệm là cosplay năng suất.'
-  return 'Nghỉ thật nhé. Scroll 47 video không tính là thiền.'
+  return 'Nghỉ thật nhé. Scroll 69 video không tính là thiền.'
 })
 
 watch([theme, focusMinutes, breakMinutes, longBreakMinutes, longBreakEvery, autoStartNext, muted, phase, secondsLeft, completedPomodoros, tasks, activeTaskId, unlockedAchievements], saveState, {
